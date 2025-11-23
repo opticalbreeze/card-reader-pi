@@ -108,7 +108,8 @@ except ImportError:
     BUZZER_PATTERNS = {
         "card_read": [(0.05, 2000)],
         "success": [(0.1, 2500), (0.05, 2500), (0.1, 2500)],
-        "failure": [(0.3, 800), (0.1, 800), (0.3, 800)]
+        "failure": [(0.3, 800), (0.1, 800), (0.3, 800)],
+        "duplicate": [(0.15, 1200), (0.05, 1200), (0.15, 1200)]
     }
     # 最小限のLED色（gpio_config.pyの完全版を使用することを推奨）
     LED_COLORS = {
@@ -431,13 +432,15 @@ class SimpleClient:
         self.set_lcd_message(MESSAGE_READING, 1)
         
         # 重複チェック（同じhh:mmでなければOK）
-        is_dup, _ = is_duplicate_attendance(card_id, timestamp, self.attendance_history)
+        is_dup, dup_msg = is_duplicate_attendance(card_id, timestamp, self.attendance_history)
         if is_dup:
-            print(f"[重複] {card_id} - スキップ")
-            self.gpio.sound("failure")
-            self.gpio.led("orange")
-            time.sleep(1)
-            self.gpio.led("green")
+            print(f"[重複] {card_id} - {dup_msg}")
+            # 重複検出時: 警告ブザー（中音）と黄色LED点滅で通知
+            self.gpio.sound("duplicate")
+            self.gpio.led_blink("yellow", times=3, duration=0.2, interval=0.1)
+            self.set_lcd_message("Duplicate!", 2)
+            time.sleep(0.5)
+            self.gpio.led("green")  # 待機状態に戻る
             return False
         
         # サーバー送信
