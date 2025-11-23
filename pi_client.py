@@ -80,6 +80,8 @@ except ImportError:
     print("[情報] GPIO機能無効")
 
 # GPIO設定（オプション）
+# gpio_config.pyから読み込む（推奨）
+# 見つからない場合はconstants.pyのデフォルト値を使用
 try:
     from gpio_config import (
         BUZZER_PIN,
@@ -90,7 +92,8 @@ try:
         LED_COLORS
     )
 except ImportError:
-    # デフォルト設定（gpio_config.pyが見つからない場合）
+    # フォールバック: gpio_config.pyが見つからない場合のデフォルト設定
+    # この設定は最小限の機能のみを提供します
     from constants import (
         GPIO_BUZZER_PIN,
         GPIO_LED_RED_PIN,
@@ -101,12 +104,13 @@ except ImportError:
     LED_RED_PIN = GPIO_LED_RED_PIN
     LED_GREEN_PIN = GPIO_LED_GREEN_PIN
     LED_BLUE_PIN = GPIO_LED_BLUE_PIN
-    # デフォルトのブザーパターンとLED色（最小限）
+    # 最小限のブザーパターン（gpio_config.pyの完全版を使用することを推奨）
     BUZZER_PATTERNS = {
         "card_read": [(0.05, 2000)],
         "success": [(0.1, 2500), (0.05, 2500), (0.1, 2500)],
         "failure": [(0.3, 800), (0.1, 800), (0.3, 800)]
     }
+    # 最小限のLED色（gpio_config.pyの完全版を使用することを推奨）
     LED_COLORS = {
         "off": (0, 0, 0),
         "green": (0, 100, 0),
@@ -248,8 +252,10 @@ class SimpleGPIO:
                 time.sleep(duration)
                 pwm.stop()
                 del pwm
-        except Exception:
-            pass
+        except Exception as e:
+            # GPIOエラーは無視（既にavailable=Falseの場合は出力しない）
+            if self.available:
+                print(f"[GPIO] ブザーエラー: {e}")
     
     def led(self, color):
         """LEDの色を設定"""
@@ -260,8 +266,10 @@ class SimpleGPIO:
             self.pwms[0].ChangeDutyCycle(r)
             self.pwms[1].ChangeDutyCycle(g)
             self.pwms[2].ChangeDutyCycle(b)
-        except Exception:
-            pass
+        except Exception as e:
+            # GPIOエラーは無視（既にavailable=Falseの場合は出力しない）
+            if self.available:
+                print(f"[GPIO] LEDエラー: {e}")
     
     def led_blink(self, color, times=3, duration=0.15, interval=0.1):
         """LEDを点滅させる"""
@@ -281,8 +289,9 @@ class SimpleGPIO:
             for pwm in self.pwms:
                 pwm.stop()
             GPIO.cleanup()
-        except Exception:
-            pass
+        except Exception as e:
+            # クリーンアップ時のエラーは無視（終了処理中）
+            print(f"[GPIO] クリーンアップエラー: {e}")
 
 
 # ============================================================================
@@ -377,13 +386,23 @@ class SimpleClient:
         if not self.lcd:
             return
         current_message = MESSAGE_TOUCH_CARD
+        error_count = 0
         while self.running:
             try:
                 if hasattr(self, '_lcd_message'):
                     current_message = self._lcd_message
                 self.lcd.show_with_time(current_message)
-            except Exception:
-                pass
+                error_count = 0  # 成功したらエラーカウントをリセット
+            except Exception as e:
+                error_count += 1
+                # 連続エラーが5回を超えたらLCDを無効化
+                if error_count > 5:
+                    print(f"[LCD] 連続エラーが{error_count}回発生 - LCD機能を無効化")
+                    self.lcd = None
+                    break
+                # 最初の数回のエラーのみ出力
+                if error_count <= 3:
+                    print(f"[LCD] 更新エラー: {e}")
             time.sleep(2)
     
     def set_lcd_message(self, message, duration=0):

@@ -59,6 +59,18 @@ LCD_LINE2 = 0xC0
 # CGRAMアドレス（カスタム文字用）
 LCD_CGRAM_ADDR = 0x40
 
+# ============================================================================
+# タイミング定数（秒）
+# ============================================================================
+LCD_DELAY_ENABLE_PULSE = 0.001      # イネーブルパルス待機時間（最小限の待機時間）
+LCD_DELAY_CLEAR = 0.002             # クリアコマンド待機時間
+LCD_DELAY_INIT = 0.2                # 初期化待機時間
+LCD_DELAY_WRITE = 0.002             # 書き込み待機時間
+LCD_DELAY_CURSOR_MOVE = 0.002       # カーソル移動待機時間
+LCD_DELAY_LINE_CHANGE = 0.003       # 行変更待機時間
+LCD_DELAY_RECONNECT = 0.1           # 再接続待機時間
+LCD_DELAY_TEST = 2.0                # テスト用待機時間
+
 
 # ============================================================================
 # 文字コード変換関数
@@ -183,23 +195,21 @@ class LCD_I2C:
             high = mode | (data & 0xF0) | backlight_bit
             self._write_byte(high)
             self._write_byte(high | LCD_ENABLE)
-            time.sleep(0.001)  # 最適化：0.002秒 → 0.001秒（最小限の待機時間）
+            time.sleep(LCD_DELAY_ENABLE_PULSE)
             self._write_byte(high & ~LCD_ENABLE)
             
             # 下位4ビット送信
             low = mode | ((data << 4) & 0xF0) | backlight_bit
             self._write_byte(low)
             self._write_byte(low | LCD_ENABLE)
-            time.sleep(0.001)  # 最適化：0.002秒 → 0.001秒（最小限の待機時間）
+            time.sleep(LCD_DELAY_ENABLE_PULSE)
             self._write_byte(low & ~LCD_ENABLE)
         except Exception as e:
             # デバッグ出力（エラー時のみ）
-            if not hasattr(LCD_I2C, '_send_error_count'):
-                LCD_I2C._send_error_count = 0
-            LCD_I2C._send_error_count += 1
-            if LCD_I2C._send_error_count <= 5:  # 最初の5回のエラーのみ出力
+            self._error_count += 1
+            if self._error_count <= self._max_errors:  # 最初のN回のエラーのみ出力
                 import traceback
-                print(f"[LCD SEND ERROR #{LCD_I2C._send_error_count}] data=0x{data:02X}, mode={mode}, エラー: {e}")
+                print(f"[LCD SEND ERROR #{self._error_count}] data=0x{data:02X}, mode={mode}, エラー: {e}")
                 traceback.print_exc()
             pass
     
@@ -218,7 +228,7 @@ class LCD_I2C:
             self._send(LCD_DISPLAY_ON, LCD_MODE_COMMAND)  # ディスプレイON
             self._send(LCD_ENTRY_MODE, LCD_MODE_COMMAND)  # エントリーモード設定
             self._send(LCD_CLEAR, LCD_MODE_COMMAND)  # 画面クリア
-            time.sleep(0.2)
+            time.sleep(LCD_DELAY_INIT)
         except Exception:
             self.available = False
     
@@ -231,7 +241,7 @@ class LCD_I2C:
         
         try:
             self._send(LCD_CLEAR, LCD_MODE_COMMAND)
-            time.sleep(0.002)  # 最適化：0.005秒 → 0.002秒（最小限の待機時間）
+            time.sleep(LCD_DELAY_CLEAR)
         except Exception:
             pass
     
@@ -294,15 +304,15 @@ class LCD_I2C:
             
             try:
                 self.clear()
-                time.sleep(0.003)
+                time.sleep(LCD_DELAY_LINE_CHANGE)
                 self.set_cursor(0, 0)
-                time.sleep(0.002)
+                time.sleep(LCD_DELAY_CURSOR_MOVE)
                 self.write(line1[:16])  # 16文字まで
-                time.sleep(0.002)
+                time.sleep(LCD_DELAY_WRITE)
                 self.set_cursor(1, 0)
-                time.sleep(0.002)
+                time.sleep(LCD_DELAY_CURSOR_MOVE)
                 self.write(line2[:16])  # 16文字まで
-                time.sleep(0.003)
+                time.sleep(LCD_DELAY_LINE_CHANGE)
                 
                 self._last_text = (line1, line2)
                 self._error_count = 0  # 成功したらエラーカウントをリセット
@@ -357,7 +367,7 @@ class LCD_I2C:
         else:
             # 再初期化を試みる
             try:
-                time.sleep(0.1)
+                time.sleep(LCD_DELAY_RECONNECT)
                 self._init_lcd()
             except:
                 pass
@@ -402,9 +412,9 @@ if __name__ == "__main__":
     try:
         # 基本テスト
         lcd.show("Hello", "World!")
-        time.sleep(2)
+        time.sleep(LCD_DELAY_TEST)
         lcd.show_with_time("Test")
-        time.sleep(2)
+        time.sleep(LCD_DELAY_TEST)
         lcd.clear()
         print("[OK] テスト完了")
         

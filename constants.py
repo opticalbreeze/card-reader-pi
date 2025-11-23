@@ -26,8 +26,19 @@
 # ネットワーク設定
 # ============================================================================
 DEFAULT_SERVER_PORT = 5000
+# デフォルトIPアドレス（設定ファイルで上書き可能）
+# 環境に応じて設定ファイル（client_config.json）で変更してください
 DEFAULT_SERVER_IP = "192.168.1.217"
 DEFAULT_SERVER_URL = f"http://{DEFAULT_SERVER_IP}:{DEFAULT_SERVER_PORT}"
+
+# プリセットIPアドレス（GUI設定画面用）
+# よく使われるIPアドレスのリスト（設定ファイルで上書き可能）
+PRESET_IP_ADDRESSES = [
+    "192.168.1.24",
+    "192.168.1.31",
+    "192.168.11.24",
+    "127.0.0.1"  # localhost
+]
 
 # API エンドポイント
 API_HEALTH = "/api/health"

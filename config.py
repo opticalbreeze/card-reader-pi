@@ -13,7 +13,7 @@ import sqlite3
 
 # 共通モジュールをインポート
 from common_utils import load_config, save_config, send_attendance_to_server
-from constants import DEFAULT_SERVER_URL, CONFIG_FILE, DB_PATH_ATTENDANCE
+from constants import DEFAULT_SERVER_URL, CONFIG_FILE, DB_PATH_ATTENDANCE, PRESET_IP_ADDRESSES
 
 
 class ConfigGUI:
@@ -132,13 +132,14 @@ class ConfigGUI:
         
         ttk.Label(preset_frame, text="よく使われるIP:").grid(row=0, column=0, sticky=tk.W)
         
-        # プリセットIPは設定ファイルから読み込むか、デフォルト値を使用
-        preset_buttons = [
-            ("192.168.1.24", "192.168.1.24"),
-            ("192.168.1.31", "192.168.1.31"),
-            ("192.168.11.24", "192.168.11.24"),
-            ("localhost", "127.0.0.1")
-        ]
+        # プリセットIPはconstants.pyから読み込む（設定ファイルで上書き可能）
+        # localhostの場合は表示名を変更
+        preset_buttons = []
+        for ip in PRESET_IP_ADDRESSES:
+            if ip == "127.0.0.1":
+                preset_buttons.append(("localhost", ip))
+            else:
+                preset_buttons.append((ip, ip))
         
         for i, (text, ip) in enumerate(preset_buttons):
             btn = ttk.Button(
