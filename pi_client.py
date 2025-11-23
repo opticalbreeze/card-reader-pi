@@ -29,7 +29,6 @@ import time
 import sys
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 import threading
 
 # 共通モジュールをインポート
@@ -403,7 +402,7 @@ class SimpleClient:
                 self._lcd_message = MESSAGE_TOUCH_CARD
             threading.Thread(target=reset, daemon=True).start()
     
-    def process_card(self, card_id, reader_idx):
+    def process_card(self, card_id):
         """カード処理（シンプル版）"""
         timestamp = datetime.now().isoformat()
         
@@ -449,9 +448,38 @@ class SimpleClient:
         self.gpio.led("green")
         return True
     
+    def _handle_card_detection(self, card_id, last_id, last_detection_time):
+        """カード検出処理（共通化）"""
+        now = time.time()
+        
+        # カードが検出されなくなった場合はlast_idをリセット（1秒以上検出されなかった場合）
+        if last_detection_time and now - last_detection_time > 1.0:
+            last_id = None
+        
+        if card_id and card_id != last_id:
+            with self.lock:
+                if card_id not in self.history or now - self.history[card_id] >= CARD_DUPLICATE_THRESHOLD:
+                    self.history[card_id] = now
+                    self.count += 1
+                    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [カード#{self.count}] IDm: {card_id}")
+                    self.process_card(card_id)
+                    last_id = card_id
+        
+        # カードが検出されている場合は検出時刻を更新
+        if card_id:
+            last_detection_time = now
+        else:
+            # カードが検出されない場合、1秒以上経過したらリセット
+            if last_detection_time and now - last_detection_time > 1.0:
+                last_id = None
+                last_detection_time = None
+        
+        return last_id, last_detection_time
+    
     def nfcpy_worker(self, path, idx):
         """nfcpyワーカー（シンプル版）"""
         last_id = None
+        last_detection_time = None
         clf = None
         
         try:
@@ -466,18 +494,18 @@ class SimpleClient:
                         'beep-on-connect': False
                     }, terminate=lambda: not self.running)
                     
+                    card_id = None
                     if tag:
                         card_id = (tag.idm if hasattr(tag, 'idm') else tag.identifier).hex().upper()
-                        if card_id and card_id != last_id:
-                            now = time.time()
-                            with self.lock:
-                                if card_id not in self.history or now - self.history[card_id] >= CARD_DUPLICATE_THRESHOLD:
-                                    self.history[card_id] = now
-                                    self.count += 1
-                                    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [カード#{self.count}] IDm: {card_id}")
-                                    self.process_card(card_id, idx)
-                                    last_id = card_id
+                    
+                    last_id, last_detection_time = self._handle_card_detection(
+                        card_id, last_id, last_detection_time
+                    )
                 except IOError:
+                    # カードが検出されない（正常な状態）
+                    last_id, last_detection_time = self._handle_card_detection(
+                        None, last_id, last_detection_time
+                    )
                     pass
                 except Exception as e:
                     print(f"[nfcpyエラー] {e}")
@@ -493,6 +521,7 @@ class SimpleClient:
     def pcsc_worker(self, reader, idx):
         """PC/SCワーカー（シンプル版）"""
         last_id = None
+        last_detection_time = None
         
         while self.running:
             try:
@@ -513,18 +542,16 @@ class SimpleClient:
                     except Exception:
                         continue
                 
-                if card_id and card_id != last_id:
-                    now = time.time()
-                    with self.lock:
-                        if card_id not in self.history or now - self.history[card_id] >= CARD_DUPLICATE_THRESHOLD:
-                            self.history[card_id] = now
-                            self.count += 1
-                            print(f"\n[{datetime.now().strftime('%H:%M:%S')}] [カード#{self.count}] IDm: {card_id}")
-                            self.process_card(card_id, idx)
-                            last_id = card_id
-                
                 connection.disconnect()
+                
+                last_id, last_detection_time = self._handle_card_detection(
+                    card_id, last_id, last_detection_time
+                )
             except (CardConnectionException, NoCardException):
+                # カードが検出されない（正常な状態）
+                last_id, last_detection_time = self._handle_card_detection(
+                    None, last_id, last_detection_time
+                )
                 pass
             except Exception as e:
                 print(f"[PC/SCエラー] {e}")
