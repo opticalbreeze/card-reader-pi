@@ -401,6 +401,9 @@ def is_duplicate_attendance(card_id: str, timestamp: str, history: dict) -> tupl
     
     Returns:
         tuple: (is_duplicate: bool, message: str)
+    
+    Note:
+        この関数は履歴を更新しません。履歴の更新は呼び出し側で行ってください。
     """
     from datetime import datetime
     from constants import ENABLE_SAME_MINUTE_CHECK, SAME_MINUTE_THRESHOLD
@@ -426,12 +429,7 @@ def is_duplicate_attendance(card_id: str, timestamp: str, history: dict) -> tupl
                     if time_diff < SAME_MINUTE_THRESHOLD:
                         return True, f"同一時刻打刻済み ({last_minute_key})"
         
-        # 履歴を更新
-        history[card_id] = {
-            'timestamp': timestamp,
-            'datetime': current_dt
-        }
-        
+        # 履歴は更新しない（呼び出し側で成功後に更新する）
         return False, ""
     
     except Exception as e:

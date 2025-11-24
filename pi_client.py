@@ -432,6 +432,8 @@ class SimpleClient:
         self.set_lcd_message(MESSAGE_READING, 1)
         
         # 重複チェック（同じhh:mmでなければOK）
+        # 注意: is_duplicate_attendanceは重複でない場合に履歴を更新するが、
+        # ここではチェックのみ行い、成功後に明示的に履歴を更新する
         is_dup, dup_msg = is_duplicate_attendance(card_id, timestamp, self.attendance_history)
         if is_dup:
             print(f"[重複] {card_id} - {dup_msg}")
@@ -466,6 +468,18 @@ class SimpleClient:
             self.set_lcd_message(MESSAGE_SAVED_LOCAL, 1)
             print(f"[保存] {card_id} (オフライン)")
             time.sleep(0.5)
+        
+        # 打刻成功後に履歴を更新（同時分打刻禁止のため）
+        # is_duplicate_attendance内でも更新されるが、明示的に更新することで確実にする
+        try:
+            from datetime import datetime
+            current_dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            self.attendance_history[card_id] = {
+                'timestamp': timestamp,
+                'datetime': current_dt
+            }
+        except Exception as e:
+            print(f"[警告] 履歴更新エラー: {e}")
         
         self.gpio.led("green")
         return True
