@@ -472,7 +472,6 @@ class SimpleClient:
         # 打刻成功後に履歴を更新（同時分打刻禁止のため）
         # is_duplicate_attendance内でも更新されるが、明示的に更新することで確実にする
         try:
-            from datetime import datetime
             current_dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             self.attendance_history[card_id] = {
                 'timestamp': timestamp,
