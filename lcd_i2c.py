@@ -199,7 +199,7 @@ class LCD_I2C:
             self._write_byte(high & ~LCD_ENABLE)
             
             # 下位4ビット送信
-            low = mode | ((data << 4) & 0xF0) | backlight_bit
+            low = mode | ((data & 0x0F) << 4) | backlight_bit
             self._write_byte(low)
             self._write_byte(low | LCD_ENABLE)
             time.sleep(LCD_DELAY_ENABLE_PULSE)
@@ -329,12 +329,31 @@ class LCD_I2C:
         if not self.available:
             return
         
-        try:
-            # 1行目: 日時（例: "2025/10/20 15:30"）
-            line1 = datetime.now().strftime("%Y/%m/%d %H:%M")
-            self.show(line1, line2)
-        except Exception:
-            pass
+        # ロック内で時刻を取得してから表示（マルチスレッド競合防止）
+        with self._lock:
+            try:
+                # 1行目: 日時（例: "2025/10/20 15:30"）
+                line1 = datetime.now().strftime("%Y/%m/%d %H:%M")
+                # show()内でもロックを取得するが、同じスレッドからの再帰的ロックは問題ない
+                # ただし、show()内のロックチェックをスキップするため、直接処理を実行
+                if self._last_text == (line1, line2):
+                    return
+                
+                self.clear()
+                time.sleep(LCD_DELAY_LINE_CHANGE)
+                self.set_cursor(0, 0)
+                time.sleep(LCD_DELAY_CURSOR_MOVE)
+                self.write(line1[:16])
+                time.sleep(LCD_DELAY_WRITE)
+                self.set_cursor(1, 0)
+                time.sleep(LCD_DELAY_CURSOR_MOVE)
+                self.write(line2[:16])
+                time.sleep(LCD_DELAY_LINE_CHANGE)
+                
+                self._last_text = (line1, line2)
+                self._error_count = 0
+            except Exception as e:
+                self._handle_error(e)
     
     def backlight_on(self):
         """バックライトをON"""
